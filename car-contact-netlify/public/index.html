@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contact Vehicle Owner</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+.card{max-width:430px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}
+.car{font-size:48px;text-align:center}h1{text-align:center;font-size:25px;margin:6px}
+.sub{text-align:center;color:#666;margin-bottom:20px}.plate{font-size:24px;font-weight:bold;text-align:center;background:#eee;padding:12px;border-radius:10px;margin-bottom:20px}
+.reason{width:100%;padding:13px;margin:6px 0;border:1px solid #ddd;border-radius:12px;background:#fff;text-align:left;font-size:15px}
+.selected{border:2px solid #25a55b;background:#effaf2}
+textarea{width:100%;min-height:90px;margin-top:8px;padding:10px;border:1px solid #ccc;border-radius:10px;box-sizing:border-box;font:inherit}
+button.send{width:100%;padding:15px;margin-top:16px;border:0;border-radius:12px;background:#1683ff;color:white;font-size:17px;font-weight:bold}
+button.send:disabled{background:#ccc}
+.small{font-size:12px;color:#777;text-align:center;line-height:1.45;margin-top:14px}
+</style></head>
+<body><div class="card">
+<div class="car">🚗</div><h1>Contact Vehicle Owner</h1>
+<div class="sub">Send a private alert about this vehicle.</div>
+<div class="plate" id="plate">WXX 1234</div>
+<div><b>Reason</b></div>
+<button class="reason" onclick="reason(this,'Your vehicle is blocking me.')">🚗 Your vehicle is blocking me</button>
+<button class="reason" onclick="reason(this,'Your vehicle lights may be left on.')">💡 Lights may be left on</button>
+<button class="reason" onclick="reason(this,'There may be an issue with your vehicle.')">⚠️ Possible vehicle issue</button>
+<button class="reason" onclick="reason(this,'I need to contact you about your vehicle.')">💬 Other</button>
+<div style="margin-top:16px"><b>Message</b></div>
+<textarea id="msg" placeholder="Optional message..."></textarea>
+<button class="send" id="sendBtn" onclick="sendAlert()">🔔 Send Alert</button>
+<div class="small">No phone number is requested. This page only sends an alert to the vehicle owner's notification channel.</div>
+<div id="status" class="small"></div>
+</div>
+<script>
+// CHANGE YOUR CAR PLATE HERE — this is just display text, not a secret
+const VEHICLE_PLATE="WXX 1234";
+let selected="I need to contact you about your vehicle.";
+document.getElementById("plate").textContent=VEHICLE_PLATE;
+function reason(el,text){document.querySelectorAll('.reason').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');selected=text;}
+
+async function sendAlert(){
+ const extra=document.getElementById('msg').value.trim();
+ const body=selected+(extra?'\nMessage: '+extra:'');
+ const status=document.getElementById('status');
+ const sendBtn=document.getElementById('sendBtn');
+ status.textContent='Sending...';
+ sendBtn.disabled=true;
+ try{
+   // Calls OUR OWN Netlify function — the real ntfy topic lives only in
+   // Netlify's environment variables and is never sent to the browser.
+   const r=await fetch('/.netlify/functions/send-alert',{
+     method:'POST',
+     headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({
+       title:'🚗 Vehicle Contact Alert: '+VEHICLE_PLATE,
+       message:body,
+       priority:'high',
+       tags:'car'
+     })
+   });
+   if(!r.ok) throw new Error(await r.text());
+   status.textContent='✅ Alert sent. You can close this page.';
+   document.querySelectorAll('.reason').forEach(x=>x.disabled=true);
+ }catch(e){
+   status.textContent='❌ Could not send the alert. Please try again in a moment.';
+   sendBtn.disabled=false;
+ }
+}
+</script></body></html>

@@ -1,0 +1,8 @@
+[build]
+  functions = "netlify/functions"
+  publish = "public"
+
+[[redirects]]
+  from = "/api/send-alert"
+  to = "/.netlify/functions/send-alert"
+  status = 200
