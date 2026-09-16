@@ -31,8 +31,10 @@ button.send:disabled{background:#ccc}
 <div id="status" class="small"></div>
 </div>
 <script>
-// CHANGE YOUR CAR PLATE HERE — this is just display text, not a secret
-const VEHICLE_PLATE="PNW 2990";
+// Plate comes from the URL, e.g. ?plate=PNW2990 — this lets ONE page serve
+// any number of cars. The value below is only a fallback if no ?plate= is present.
+const params = new URLSearchParams(window.location.search);
+const VEHICLE_PLATE = params.get('plate') || 'PNW 2990';
 let selected="I need to contact you about your vehicle.";
 document.getElementById("plate").textContent=VEHICLE_PLATE;
 function reason(el,text){document.querySelectorAll('.reason').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');selected=text;}
