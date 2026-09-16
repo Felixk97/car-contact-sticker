@@ -47,11 +47,18 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: "Missing message" };
   }
 
+  // HTTP headers can only contain Latin-1 characters — emoji (like 🚗) break
+  // fetch() with "Cannot convert argument to a ByteString" if left in a header.
+  // Strip anything outside that range so the Title header never fails,
+  // regardless of what the calling page sends. ntfy still shows a vehicle
+  // emoji automatically via the "tags" field below.
+  const safeTitle = (title || "Vehicle Contact Alert").replace(/[^\x00-\xFF]/g, "").trim() || "Vehicle Contact Alert";
+
   try {
     const resp = await fetch(`https://ntfy.sh/${topic}`, {
       method: "POST",
       headers: {
-        Title: title || "Vehicle Contact Alert",
+        Title: safeTitle,
         Priority: priority || "high",
         Tags: tags || "car",
       },
