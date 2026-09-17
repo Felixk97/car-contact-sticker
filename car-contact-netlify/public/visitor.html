@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contact Vehicle Owner</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+.card{max-width:430px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}
+.car{font-size:48px;text-align:center}h1{text-align:center;font-size:25px;margin:6px}
+.sub{text-align:center;color:#666;margin-bottom:20px}.plate{font-size:24px;font-weight:bold;text-align:center;background:#eee;padding:12px;border-radius:10px;margin-bottom:20px}
+.reason{width:100%;padding:13px;margin:6px 0;border:1px solid #ddd;border-radius:12px;background:#fff;text-align:left;font-size:15px}
+.selected{border:2px solid #25a55b;background:#effaf2}
+textarea{width:100%;min-height:90px;margin-top:8px;padding:10px;border:1px solid #ccc;border-radius:10px;box-sizing:border-box;font:inherit}
+button.send{width:100%;padding:15px;margin-top:16px;border:0;border-radius:12px;background:#1683ff;color:white;font-size:17px;font-weight:bold}
+button.send:disabled{background:#ccc}
+.small{font-size:12px;color:#777;text-align:center;line-height:1.45;margin-top:14px}
+
+#step1{display:block}
+#chatPanel{display:none;margin-top:8px}
+.thread{max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:12px;padding:10px;background:#fafbfc;margin-bottom:10px}
+.bubble{max-width:80%;padding:10px 14px;border-radius:14px;margin:6px 0;font-size:14px;line-height:1.4;clear:both}
+.bubble.mine{background:#1683ff;color:#fff;float:right;border-bottom-right-radius:4px}
+.bubble.theirs{background:#eee;color:#222;float:left;border-bottom-left-radius:4px}
+.bubble.system{background:none;color:#999;text-align:center;float:none;font-size:12px;margin:10px auto}
+.chat-row{display:flex;gap:8px;clear:both}
+.chat-row input{flex:1;padding:12px;border:1px solid #ccc;border-radius:10px;font:inherit;box-sizing:border-box}
+.chat-row button{padding:0 18px;border:0;border-radius:10px;background:#1683ff;color:#fff;font-weight:bold}
+.chat-row button:disabled{background:#ccc}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#25a55b;margin-right:6px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style></head>
+<body><div class="card">
+<div class="car">🚗</div><h1>Contact Vehicle Owner</h1>
+<div class="sub">Send a private alert about this vehicle.</div>
+<div class="plate" id="plate">PNW 2990</div>
+
+<div id="step1">
+<div><b>Reason</b></div>
+<button class="reason" onclick="reason(this,'Your vehicle is blocking me.')">🚗 Your vehicle is blocking me</button>
+<button class="reason" onclick="reason(this,'Your vehicle lights may be left on.')">💡 Lights may be left on</button>
+<button class="reason" onclick="reason(this,'There may be an issue with your vehicle.')">⚠️ Possible vehicle issue</button>
+<button class="reason" onclick="reason(this,'I need to contact you about your vehicle.')">💬 Other</button>
+<div style="margin-top:16px"><b>Message</b></div>
+<textarea id="msg" placeholder="Optional message..."></textarea>
+<button class="send" id="sendBtn" onclick="sendAlert()">🔔 Send Alert</button>
+<div class="small">No phone number is requested. This page only sends an alert to the vehicle owner's notification channel.</div>
+<div id="status" class="small"></div>
+</div>
+
+<div id="chatPanel">
+  <div class="small" style="margin-bottom:8px"><span class="live-dot"></span>Live — keep this page open to chat</div>
+  <div class="thread" id="thread"></div>
+  <div class="chat-row">
+    <input id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter')sendChatMsg()">
+    <button id="chatSendBtn" onclick="sendChatMsg()">Send</button>
+  </div>
+</div>
+
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const VEHICLE_PLATE = params.get('plate') || 'PNW 2990';
+let selected="I need to contact you about your vehicle.";
+document.getElementById("plate").textContent=VEHICLE_PLATE;
+function reason(el,text){document.querySelectorAll('.reason').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');selected=text;}
+
+let convoTopic = null;
+let sseConn = null;
+let seenIds = new Set();
+
+function addBubble(text, kind) {
+  const thread = document.getElementById('thread');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + kind;
+  div.textContent = text;
+  thread.appendChild(div);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function handleIncoming(msg, id) {
+  if (seenIds.has(id)) return;
+  seenIds.add(id);
+  // Messages are prefixed with who sent them, e.g. "Visitor: ..." or "Owner: ..."
+  if (msg.startsWith('Owner: ')) {
+    addBubble(msg.slice(7), 'theirs');
+  } else if (msg.startsWith('Visitor: ')) {
+    addBubble(msg.slice(9), 'mine');
+  } else {
+    addBubble(msg, 'system');
+  }
+}
+
+async function loadHistory(topic) {
+  try {
+    const r = await fetch('https://ntfy.sh/' + topic + '/json?poll=1');
+    const text = await r.text();
+    text.trim().split('\n').filter(Boolean).forEach(line => {
+      try {
+        const data = JSON.parse(line);
+        if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+      } catch (e) {}
+    });
+  } catch (e) { /* ignore, live stream will still work */ }
+}
+
+function subscribeLive(topic) {
+  sseConn = new EventSource('https://ntfy.sh/' + topic + '/sse');
+  sseConn.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+    } catch (err) {}
+  };
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !convoTopic) return;
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+  try {
+    await fetch('https://ntfy.sh/' + convoTopic, {
+      method: 'POST',
+      body: 'Visitor: ' + text
+    });
+    input.value = '';
+  } catch (e) {
+    alert('Could not send — check your connection and try again.');
+  }
+  btn.disabled = false;
+  input.focus();
+}
+
+async function sendAlert(){
+ const extra=document.getElementById('msg').value.trim();
+ const body=selected+(extra?'\nMessage: '+extra:'');
+ const status=document.getElementById('status');
+ const sendBtn=document.getElementById('sendBtn');
+ status.textContent='Sending...';
+ sendBtn.disabled=true;
+
+ // Random one-time conversation channel — used for BOTH directions of chat.
+ // Not the owner's private topic, so it's safe to use directly in the browser.
+ convoTopic = 'carchat-' + crypto.randomUUID().replace(/-/g, '');
+
+ try{
+   const r=await fetch('/.netlify/functions/send-alert',{
+     method:'POST',
+     headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({
+       title:'🚗 Vehicle Contact Alert: '+VEHICLE_PLATE,
+       message:body,
+       priority:'high',
+       tags:'car',
+       replyTopic: convoTopic
+     })
+   });
+   if(!r.ok) throw new Error(await r.text());
+
+   // Also publish the opening message into the conversation channel itself,
+   // so it shows up in the chat history for both sides.
+   await fetch('https://ntfy.sh/' + convoTopic, {
+     method: 'POST',
+     body: 'Visitor: ' + body
+   });
+
+   document.getElementById('step1').style.display = 'none';
+   document.getElementById('chatPanel').style.display = 'block';
+   addBubble(body, 'mine');
+   seenIds.add('__initial__'); // placeholder, real id filtering happens via history/live
+   loadHistory(convoTopic);
+   subscribeLive(convoTopic);
+ }catch(e){
+   status.textContent='❌ Could not send the alert. Please try again in a moment.';
+   sendBtn.disabled=false;
+ }
+}
+</script></body></html>

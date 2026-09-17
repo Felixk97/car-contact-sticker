@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat with visitor</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+.card{max-width:430px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}
+h1{text-align:center;font-size:22px;margin:6px}
+.sub{text-align:center;color:#666;margin-bottom:16px;font-size:14px}
+.thread{max-height:340px;overflow-y:auto;border:1px solid #eee;border-radius:12px;padding:10px;background:#fafbfc;margin-bottom:10px}
+.bubble{max-width:80%;padding:10px 14px;border-radius:14px;margin:6px 0;font-size:14px;line-height:1.4;clear:both}
+.bubble.mine{background:#25a55b;color:#fff;float:right;border-bottom-right-radius:4px}
+.bubble.theirs{background:#eee;color:#222;float:left;border-bottom-left-radius:4px}
+.bubble.system{background:none;color:#999;text-align:center;float:none;font-size:12px;margin:10px auto}
+.chat-row{display:flex;gap:8px;clear:both}
+.chat-row input{flex:1;padding:12px;border:1px solid #ccc;border-radius:10px;font:inherit;box-sizing:border-box}
+.chat-row button{padding:0 18px;border:0;border-radius:10px;background:#25a55b;color:#fff;font-weight:bold}
+.chat-row button:disabled{background:#ccc}
+.quick{width:100%;padding:11px;margin:4px 0;border:1px solid #ddd;border-radius:10px;background:#fff;text-align:left;font-size:13px}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#25a55b;margin-right:6px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.small{font-size:12px;color:#777;text-align:center;line-height:1.45;margin-top:14px}
+</style></head>
+<body><div class="card">
+<h1>💬 Chat with visitor</h1>
+<div class="sub"><span class="live-dot"></span>Live — keep this page open to keep chatting. They won't see your number.</div>
+
+<div id="noTopic" style="display:none" class="small">❌ This link is missing its chat code — ask the visitor to send a new alert.</div>
+
+<div id="chatArea">
+<div class="thread" id="thread"></div>
+<button class="quick" onclick="quickFill('Sorry, I\'ll move it right away.')">🚗 I'll move it right away</button>
+<button class="quick" onclick="quickFill('On my way now, give me a few minutes.')">⏱️ On my way, few minutes</button>
+<button class="quick" onclick="quickFill('Thanks for letting me know.')">🙏 Thanks for letting me know</button>
+<div class="chat-row" style="margin-top:8px">
+  <input id="chatInput" placeholder="Type a reply..." onkeydown="if(event.key==='Enter')sendChatMsg()">
+  <button id="chatSendBtn" onclick="sendChatMsg()">Send</button>
+</div>
+</div>
+
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const TOPIC = params.get('topic');
+let seenIds = new Set();
+
+if (!TOPIC) {
+  document.getElementById('noTopic').style.display = 'block';
+  document.getElementById('chatArea').style.display = 'none';
+} else {
+  loadHistory(TOPIC);
+  subscribeLive(TOPIC);
+}
+
+function quickFill(text) {
+  document.getElementById('chatInput').value = text;
+}
+
+function addBubble(text, kind) {
+  const thread = document.getElementById('thread');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + kind;
+  div.textContent = text;
+  thread.appendChild(div);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function handleIncoming(msg, id) {
+  if (seenIds.has(id)) return;
+  seenIds.add(id);
+  // From the OWNER's point of view: their own messages are "mine",
+  // the visitor's messages are "theirs" — opposite labeling from the visitor page.
+  if (msg.startsWith('Owner: ')) {
+    addBubble(msg.slice(7), 'mine');
+  } else if (msg.startsWith('Visitor: ')) {
+    addBubble(msg.slice(9), 'theirs');
+  } else {
+    addBubble(msg, 'system');
+  }
+}
+
+async function loadHistory(topic) {
+  try {
+    const r = await fetch('https://ntfy.sh/' + topic + '/json?poll=1');
+    const text = await r.text();
+    text.trim().split('\n').filter(Boolean).forEach(line => {
+      try {
+        const data = JSON.parse(line);
+        if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+function subscribeLive(topic) {
+  const sse = new EventSource('https://ntfy.sh/' + topic + '/sse');
+  sse.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+    } catch (err) {}
+  };
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !TOPIC) return;
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+  try {
+    // Posts directly to the one-time conversation channel — no server needed.
+    await fetch('https://ntfy.sh/' + TOPIC, {
+      method: 'POST',
+      body: 'Owner: ' + text
+    });
+    input.value = '';
+  } catch (e) {
+    alert('Could not send — check your connection and try again.');
+  }
+  btn.disabled = false;
+  input.focus();
+}
+</script>
+</body></html>
