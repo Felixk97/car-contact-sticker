@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reply to visitor</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+.card{max-width:430px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}
+h1{text-align:center;font-size:22px;margin:6px}
+.sub{text-align:center;color:#666;margin-bottom:20px;font-size:14px}
+textarea{width:100%;min-height:100px;margin-top:8px;padding:10px;border:1px solid #ccc;border-radius:10px;box-sizing:border-box;font:inherit}
+button.send{width:100%;padding:15px;margin-top:16px;border:0;border-radius:12px;background:#25a55b;color:white;font-size:17px;font-weight:bold}
+button.send:disabled{background:#ccc}
+.small{font-size:12px;color:#777;text-align:center;line-height:1.45;margin-top:14px}
+.quick{width:100%;padding:12px;margin:5px 0;border:1px solid #ddd;border-radius:10px;background:#fff;text-align:left;font-size:14px}
+</style></head>
+<body><div class="card">
+<h1>💬 Reply to visitor</h1>
+<div class="sub">This goes straight to the person who scanned your car's sticker. They won't see your number.</div>
+<button class="quick" onclick="quickReply('Sorry, I\'ll move it right away.')">🚗 I'll move it right away</button>
+<button class="quick" onclick="quickReply('On my way now, give me a few minutes.')">⏱️ On my way, few minutes</button>
+<button class="quick" onclick="quickReply('Thanks for letting me know.')">🙏 Thanks for letting me know</button>
+<textarea id="msg" placeholder="Type your reply..."></textarea>
+<button class="send" id="sendBtn" onclick="sendReply()">Send Reply</button>
+<div id="status" class="small"></div>
+</div>
+<script>
+const params = new URLSearchParams(window.location.search);
+const REPLY_TOPIC = params.get('topic');
+const status = document.getElementById('status');
+
+if (!REPLY_TOPIC) {
+  status.textContent = '❌ This link is missing its reply code — ask the visitor to send a new alert.';
+  document.getElementById('sendBtn').disabled = true;
+}
+
+function quickReply(text) {
+  document.getElementById('msg').value = text;
+}
+
+async function sendReply() {
+  const text = document.getElementById('msg').value.trim();
+  if (!text) { status.textContent = 'Type a reply first.'; return; }
+  const sendBtn = document.getElementById('sendBtn');
+  sendBtn.disabled = true;
+  status.textContent = 'Sending...';
+  try {
+    // This posts directly to ntfy.sh from the browser — no server involved.
+    // REPLY_TOPIC is a random one-time channel, not your private topic,
+    // so it's safe to use directly here.
+    const r = await fetch('https://ntfy.sh/' + REPLY_TOPIC, {
+      method: 'POST',
+      headers: { 'Title': 'Reply from owner' },
+      body: text
+    });
+    if (!r.ok) throw new Error();
+    status.textContent = '✅ Reply sent. You can close this page.';
+  } catch (e) {
+    status.textContent = '❌ Could not send. Please try again.';
+    sendBtn.disabled = false;
+  }
+}
+</script>
+</body></html>
