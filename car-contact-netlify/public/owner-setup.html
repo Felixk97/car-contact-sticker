@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vehicle Owner Setup</title>
+<style>body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0}.card{max-width:520px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}code{word-break:break-all;background:#eee;padding:5px;border-radius:5px;display:inline-block;margin:4px 0}pre{background:#eee;padding:12px;border-radius:8px;overflow-x:auto;font-size:13px}a{color:#1683ff}h1{font-size:24px}li{margin:10px 0}</style></head>
+<body><div class="card"><h1>🔔 Vehicle Owner Setup</h1>
+
+<h3>One-time setup</h3>
+<ol>
+<li>Install the free <b>ntfy</b> app on your phone.</li>
+<li>Pick a long, random topic name and subscribe to it in the app — this is your private notification channel.</li>
+<li>In Netlify, go to <b>Site settings → Environment variables</b> and add <code>PLATE_TOPIC_MAP</code> with a value like:
+<pre>{"PNW2990":"your-topic-here","PKJ999":"your-topic-here"}</pre>
+Plate numbers as keys have NO spaces and are UPPERCASE. All your own cars can point to the same topic (your phone).
+</li>
+<li>Also add each new plate as an option in <code>public/index.html</code> (and <code>visitor.html</code>) — find the
+<code>&lt;select class="plate-select"&gt;</code> section and add a line like:
+<pre>&lt;option value="PKJ999"&gt;PKJ 999&lt;/option&gt;</pre>
+</li>
+<li>Deploy the site, open it, and send yourself a test alert to confirm it reaches your phone.</li>
+</ol>
+
+<h3>Adding a car for a different owner later</h3>
+<p>Just add their plate to <code>PLATE_TOPIC_MAP</code> pointing at <i>their</i> topic instead of yours, and add the plate
+as a dropdown option. No code changes needed beyond that.</p>
+
+<h3>QR code</h3>
+<p>Since the page now has a dropdown, you only need <b>ONE QR code</b> for all your cars — it can point straight at
+your site's root URL. The visitor picks which car it's about after scanning.</p>
+</div></body></html>

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Contact Vehicle Owner</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+.card{max-width:430px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}
+.car{font-size:48px;text-align:center}h1{text-align:center;font-size:25px;margin:6px}
+.sub{text-align:center;color:#666;margin-bottom:16px}
+.lang-row{display:flex;justify-content:center;gap:6px;margin-bottom:16px}
+.lang-btn{padding:6px 14px;border:1px solid #ddd;border-radius:20px;background:#fff;font-size:13px;cursor:pointer;color:#555}
+.lang-btn.active{background:#1683ff;color:#fff;border-color:#1683ff}
+select.plate-select{width:100%;font-size:20px;font-weight:bold;text-align:center;background:#eee;padding:14px;border-radius:10px;margin-bottom:20px;border:1px solid #ddd;-webkit-appearance:none;appearance:none}
+.reason{width:100%;padding:13px;margin:6px 0;border:1px solid #ddd;border-radius:12px;background:#fff;text-align:left;font-size:15px}
+.selected{border:2px solid #25a55b;background:#effaf2}
+textarea{width:100%;min-height:90px;margin-top:8px;padding:10px;border:1px solid #ccc;border-radius:10px;box-sizing:border-box;font:inherit}
+button.send{width:100%;padding:15px;margin-top:16px;border:0;border-radius:12px;background:#1683ff;color:white;font-size:17px;font-weight:bold}
+button.send:disabled{background:#ccc}
+.small{font-size:12px;color:#777;text-align:center;line-height:1.45;margin-top:14px}
+
+#step1{display:block}
+#chatPanel{display:none;margin-top:8px}
+.thread{max-height:280px;overflow-y:auto;border:1px solid #eee;border-radius:12px;padding:10px;background:#fafbfc;margin-bottom:10px}
+.bubble{max-width:80%;padding:10px 14px;border-radius:14px;margin:6px 0;font-size:14px;line-height:1.4;clear:both}
+.bubble.mine{background:#1683ff;color:#fff;float:right;border-bottom-right-radius:4px}
+.bubble.theirs{background:#eee;color:#222;float:left;border-bottom-left-radius:4px}
+.bubble.system{background:none;color:#999;text-align:center;float:none;font-size:12px;margin:10px auto}
+.chat-row{display:flex;gap:8px;clear:both}
+.chat-row input{flex:1;padding:12px;border:1px solid #ccc;border-radius:10px;font:inherit;box-sizing:border-box}
+.chat-row button{padding:0 18px;border:0;border-radius:10px;background:#1683ff;color:#fff;font-weight:bold}
+.chat-row button:disabled{background:#ccc}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#25a55b;margin-right:6px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style></head>
+<body><div class="card">
+<div class="car">🚗</div><h1 id="t-pageTitle">Contact Vehicle Owner</h1>
+<div class="sub" id="t-subtitle">Send a private alert about this vehicle.</div>
+
+<div class="lang-row">
+  <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+  <button class="lang-btn" data-lang="bm" onclick="setLang('bm')">BM</button>
+  <button class="lang-btn" data-lang="zh" onclick="setLang('zh')">中文</button>
+</div>
+
+<div><b id="t-vehicleLabel">Vehicle</b></div>
+<select class="plate-select" id="plateSelect">
+  <option value="" id="t-selectPlateOpt">Select the car plate...</option>
+  <option value="PNW2990">PNW 2990</option>
+  <option value="PKJ999">PKJ 999</option>
+</select>
+
+<div id="step1">
+<div><b id="t-reasonLabel">Reason</b></div>
+<button class="reason" data-reason-idx="0" onclick="reason(this,0)"></button>
+<button class="reason" data-reason-idx="1" onclick="reason(this,1)"></button>
+<button class="reason" data-reason-idx="2" onclick="reason(this,2)"></button>
+<button class="reason" data-reason-idx="3" onclick="reason(this,3)"></button>
+<div style="margin-top:16px"><b id="t-messageLabel">Message</b></div>
+<textarea id="msg"></textarea>
+<button class="send" id="sendBtn" onclick="sendAlert()"></button>
+<div class="small" id="t-noPhoneNote">No phone number is requested. This page only sends an alert to the vehicle owner's notification channel.</div>
+<div id="status" class="small"></div>
+</div>
+
+<div id="chatPanel">
+  <div class="small" style="margin-bottom:8px"><span class="live-dot"></span><span id="t-liveNote">Live — keep this page open to chat</span></div>
+  <div class="thread" id="thread"></div>
+  <div class="chat-row">
+    <input id="chatInput" onkeydown="if(event.key==='Enter')sendChatMsg()">
+    <button id="chatSendBtn" onclick="sendChatMsg()"></button>
+  </div>
+</div>
+
+</div>
+<script>
+const REASONS = [
+  { icon:'🚗', en:'Your vehicle is blocking me.', bm:'Kenderaan anda menghalang saya.', zh:'你的车挡住我了。' },
+  { icon:'💡', en:'Your vehicle lights may be left on.', bm:'Lampu kenderaan anda mungkin masih menyala.', zh:'你的车灯可能没关。' },
+  { icon:'⚠️', en:'There may be an issue with your vehicle.', bm:'Mungkin ada masalah dengan kenderaan anda.', zh:'你的车可能有问题。' },
+  { icon:'💬', en:'I need to contact you about your vehicle.', bm:'Saya perlu menghubungi anda mengenai kenderaan anda.', zh:'我需要联系你关于你的车。' }
+];
+
+const UI = {
+  en: {
+    pageTitle:'Contact Vehicle Owner', subtitle:'Send a private alert about this vehicle.',
+    vehicleLabel:'Vehicle', selectPlateOpt:'Select the car plate...', reasonLabel:'Reason',
+    messageLabel:'Message', msgPlaceholder:'Optional message...', sendBtn:'🔔 Send Alert',
+    noPhoneNote:"No phone number is requested. This page only sends an alert to the vehicle owner's notification channel.",
+    pleaseSelect:'Please select which vehicle this is about.', sending:'Sending...',
+    sentWaiting:'✅ Alert sent. Waiting to see if the owner replies below.',
+    sendError:'❌ Could not send the alert. Please check the plate was selected and try again.',
+    liveNote:'Live — keep this page open to chat', chatPlaceholder:'Type a message...', chatSend:'Send'
+  },
+  bm: {
+    pageTitle:'Hubungi Pemilik Kenderaan', subtitle:'Hantar makluman peribadi mengenai kenderaan ini.',
+    vehicleLabel:'Kenderaan', selectPlateOpt:'Pilih plat kenderaan...', reasonLabel:'Sebab',
+    messageLabel:'Mesej', msgPlaceholder:'Mesej (pilihan)...', sendBtn:'🔔 Hantar Makluman',
+    noPhoneNote:'Tiada nombor telefon diperlukan. Halaman ini hanya menghantar makluman ke saluran pemberitahuan pemilik kenderaan.',
+    pleaseSelect:'Sila pilih kenderaan yang berkenaan.', sending:'Menghantar...',
+    sentWaiting:'✅ Makluman dihantar. Menunggu balasan pemilik di bawah.',
+    sendError:'❌ Gagal menghantar makluman. Sila semak plat kenderaan dan cuba lagi.',
+    liveNote:'Langsung — biarkan halaman ini terbuka untuk berbual', chatPlaceholder:'Taip mesej...', chatSend:'Hantar'
+  },
+  zh: {
+    pageTitle:'联系车主', subtitle:'发送关于这辆车的私密提醒。',
+    vehicleLabel:'车辆', selectPlateOpt:'选择车牌...', reasonLabel:'原因',
+    messageLabel:'留言', msgPlaceholder:'留言（可选）...', sendBtn:'🔔 发送提醒',
+    noPhoneNote:'无需提供电话号码。此页面仅向车主的通知渠道发送提醒。',
+    pleaseSelect:'请选择相关车辆。', sending:'发送中...',
+    sentWaiting:'✅ 提醒已发送。正在等待车主回复。',
+    sendError:'❌ 无法发送提醒。请确认已选择车牌并重试。',
+    liveNote:'实时 — 请保持此页面开启以继续聊天', chatPlaceholder:'输入消息...', chatSend:'发送'
+  }
+};
+
+let currentLang = localStorage.getItem('carAlertLang') || 'en';
+let selectedIdx = 3;
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('carAlertLang', lang);
+  const t = UI[lang];
+  document.getElementById('t-pageTitle').textContent = t.pageTitle;
+  document.getElementById('t-subtitle').textContent = t.subtitle;
+  document.getElementById('t-vehicleLabel').textContent = t.vehicleLabel;
+  document.getElementById('t-selectPlateOpt').textContent = t.selectPlateOpt;
+  document.getElementById('t-reasonLabel').textContent = t.reasonLabel;
+  document.getElementById('t-messageLabel').textContent = t.messageLabel;
+  document.getElementById('msg').placeholder = t.msgPlaceholder;
+  document.getElementById('sendBtn').textContent = t.sendBtn;
+  document.getElementById('t-noPhoneNote').textContent = t.noPhoneNote;
+  document.getElementById('t-liveNote').textContent = t.liveNote;
+  document.getElementById('chatInput').placeholder = t.chatPlaceholder;
+  document.getElementById('chatSendBtn').textContent = t.chatSend;
+  document.querySelectorAll('.reason').forEach((btn, i) => {
+    btn.textContent = REASONS[i].icon + ' ' + REASONS[i][lang];
+  });
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.documentElement.lang = lang === 'zh' ? 'zh' : (lang === 'bm' ? 'ms' : 'en');
+}
+
+const params = new URLSearchParams(window.location.search);
+
+const prefill = params.get('plate');
+if (prefill) {
+  const normalized = prefill.toUpperCase().replace(/\s+/g, '');
+  const sel = document.getElementById('plateSelect');
+  for (const opt of sel.options) {
+    if (opt.value === normalized) { sel.value = normalized; break; }
+  }
+}
+
+function reason(el, idx) {
+  document.querySelectorAll('.reason').forEach(x => x.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedIdx = idx;
+}
+
+let convoTopic = null;
+let sseConn = null;
+let seenIds = new Set();
+
+function addBubble(text, kind) {
+  const thread = document.getElementById('thread');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + kind;
+  div.textContent = text;
+  thread.appendChild(div);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function handleIncoming(msg, id) {
+  if (seenIds.has(id)) return;
+  seenIds.add(id);
+  if (msg.startsWith('Owner: ')) {
+    addBubble(msg.slice(7), 'theirs');
+  } else if (msg.startsWith('Visitor: ')) {
+    addBubble(msg.slice(9), 'mine');
+  } else {
+    addBubble(msg, 'system');
+  }
+}
+
+async function loadHistory(topic) {
+  try {
+    const r = await fetch('https://ntfy.sh/' + topic + '/json?poll=1');
+    const text = await r.text();
+    text.trim().split('\n').filter(Boolean).forEach(line => {
+      try {
+        const data = JSON.parse(line);
+        if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+function subscribeLive(topic) {
+  sseConn = new EventSource('https://ntfy.sh/' + topic + '/sse');
+  sseConn.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+    } catch (err) {}
+  };
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !convoTopic) return;
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+  try {
+    await fetch('https://ntfy.sh/' + convoTopic, { method: 'POST', body: 'Visitor: ' + text });
+    input.value = '';
+  } catch (e) {
+    alert('Could not send — check your connection and try again.');
+  }
+  btn.disabled = false;
+  input.focus();
+}
+
+async function sendAlert(){
+ const t = UI[currentLang];
+ const plateVal = document.getElementById('plateSelect').value;
+ const status = document.getElementById('status');
+ const sendBtn = document.getElementById('sendBtn');
+
+ if (!plateVal) {
+   status.textContent = t.pleaseSelect;
+   return;
+ }
+
+ const plateDisplay = document.getElementById('plateSelect').selectedOptions[0].textContent;
+ const extra = document.getElementById('msg').value.trim();
+ const reasonText = REASONS[selectedIdx][currentLang];
+ const body = reasonText + (extra ? '\nMessage: ' + extra : '');
+ status.textContent = t.sending;
+ sendBtn.disabled = true;
+
+ convoTopic = 'carchat-' + crypto.randomUUID().replace(/-/g, '');
+
+ try{
+   const r = await fetch('/.netlify/functions/send-alert',{
+     method:'POST',
+     headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({
+       title:'🚗 Vehicle Contact Alert: '+plateDisplay,
+       message:body,
+       priority:'high',
+       tags:'car',
+       replyTopic: convoTopic,
+       plate: plateVal
+     })
+   });
+   if(!r.ok) throw new Error(await r.text());
+
+   await fetch('https://ntfy.sh/' + convoTopic, { method: 'POST', body: 'Visitor: ' + body });
+
+   document.getElementById('step1').style.display = 'none';
+   document.getElementById('chatPanel').style.display = 'block';
+   addBubble(body, 'mine');
+   loadHistory(convoTopic);
+   subscribeLive(convoTopic);
+ }catch(e){
+   status.textContent = t.sendError;
+   sendBtn.disabled = false;
+ }
+}
+
+setLang(currentLang);
+</script></body></html>

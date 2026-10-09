@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chat with visitor</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f3f5f7;margin:0;color:#222}
+.card{max-width:430px;margin:25px auto;background:#fff;padding:24px;border-radius:20px;box-shadow:0 8px 28px #0001}
+h1{text-align:center;font-size:22px;margin:6px}
+.sub{text-align:center;color:#666;margin-bottom:12px;font-size:14px}
+.lang-row{display:flex;justify-content:center;gap:6px;margin-bottom:16px}
+.lang-btn{padding:6px 14px;border:1px solid #ddd;border-radius:20px;background:#fff;font-size:13px;cursor:pointer;color:#555}
+.lang-btn.active{background:#25a55b;color:#fff;border-color:#25a55b}
+.thread{max-height:340px;overflow-y:auto;border:1px solid #eee;border-radius:12px;padding:10px;background:#fafbfc;margin-bottom:10px}
+.bubble{max-width:80%;padding:10px 14px;border-radius:14px;margin:6px 0;font-size:14px;line-height:1.4;clear:both}
+.bubble.mine{background:#25a55b;color:#fff;float:right;border-bottom-right-radius:4px}
+.bubble.theirs{background:#eee;color:#222;float:left;border-bottom-left-radius:4px}
+.bubble.system{background:none;color:#999;text-align:center;float:none;font-size:12px;margin:10px auto}
+.chat-row{display:flex;gap:8px;clear:both}
+.chat-row input{flex:1;padding:12px;border:1px solid #ccc;border-radius:10px;font:inherit;box-sizing:border-box}
+.chat-row button{padding:0 18px;border:0;border-radius:10px;background:#25a55b;color:#fff;font-weight:bold}
+.chat-row button:disabled{background:#ccc}
+.quick{width:100%;padding:11px;margin:4px 0;border:1px solid #ddd;border-radius:10px;background:#fff;text-align:left;font-size:13px}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#25a55b;margin-right:6px;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.small{font-size:12px;color:#777;text-align:center;line-height:1.45;margin-top:14px}
+</style></head>
+<body><div class="card">
+<h1 id="t-title">💬 Chat with visitor</h1>
+<div class="sub"><span class="live-dot"></span><span id="t-subtitle">Live — keep this page open to keep chatting. They won't see your number.</span></div>
+
+<div class="lang-row">
+  <button class="lang-btn" data-lang="en" onclick="setLang('en')">EN</button>
+  <button class="lang-btn" data-lang="bm" onclick="setLang('bm')">BM</button>
+  <button class="lang-btn" data-lang="zh" onclick="setLang('zh')">中文</button>
+</div>
+
+<div id="noTopic" style="display:none" class="small"></div>
+
+<div id="chatArea">
+<div class="thread" id="thread"></div>
+<button class="quick" data-quick-idx="0" onclick="quickFill(0)"></button>
+<button class="quick" data-quick-idx="1" onclick="quickFill(1)"></button>
+<button class="quick" data-quick-idx="2" onclick="quickFill(2)"></button>
+<div class="chat-row" style="margin-top:8px">
+  <input id="chatInput" onkeydown="if(event.key==='Enter')sendChatMsg()">
+  <button id="chatSendBtn" onclick="sendChatMsg()"></button>
+</div>
+</div>
+
+</div>
+<script>
+const QUICK_REPLIES = [
+  { icon:'🚗', en:"I'll move it right away.", bm:'Saya akan alihkan sekarang.', zh:'我马上移车。' },
+  { icon:'⏱️', en:'On my way now, give me a few minutes.', bm:'Saya dalam perjalanan, beri saya beberapa minit.', zh:'我马上到，请给我几分钟。' },
+  { icon:'🙏', en:'Thanks for letting me know.', bm:'Terima kasih kerana memberitahu saya.', zh:'谢谢你的提醒。' }
+];
+
+const UI = {
+  en: {
+    title:'💬 Chat with visitor', subtitle:"Live — keep this page open to keep chatting. They won't see your number.",
+    noTopic:'❌ This link is missing its chat code — ask the visitor to send a new alert.',
+    chatPlaceholder:'Type a reply...', chatSend:'Send', sendError:'Could not send — check your connection and try again.'
+  },
+  bm: {
+    title:'💬 Berbual dengan pelawat', subtitle:'Langsung — biarkan halaman ini terbuka untuk terus berbual. Nombor anda tidak akan dipaparkan.',
+    noTopic:'❌ Pautan ini tiada kod perbualan — minta pelawat hantar makluman baharu.',
+    chatPlaceholder:'Taip balasan...', chatSend:'Hantar', sendError:'Gagal menghantar — sila semak sambungan dan cuba lagi.'
+  },
+  zh: {
+    title:'💬 与访客聊天', subtitle:'实时 — 请保持此页面开启以继续聊天。对方不会看到您的号码。',
+    noTopic:'❌ 此链接缺少聊天代码 — 请访客重新发送提醒。',
+    chatPlaceholder:'输入回复...', chatSend:'发送', sendError:'发送失败，请检查网络连接后重试。'
+  }
+};
+
+let currentLang = localStorage.getItem('carAlertLang') || 'en';
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('carAlertLang', lang);
+  const t = UI[lang];
+  document.getElementById('t-title').textContent = t.title;
+  document.getElementById('t-subtitle').textContent = t.subtitle;
+  document.getElementById('noTopic').textContent = t.noTopic;
+  document.getElementById('chatInput').placeholder = t.chatPlaceholder;
+  document.getElementById('chatSendBtn').textContent = t.chatSend;
+  document.querySelectorAll('.quick').forEach((btn, i) => {
+    btn.textContent = QUICK_REPLIES[i].icon + ' ' + QUICK_REPLIES[i][lang];
+  });
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.documentElement.lang = lang === 'zh' ? 'zh' : (lang === 'bm' ? 'ms' : 'en');
+}
+
+const params = new URLSearchParams(window.location.search);
+const TOPIC = params.get('topic');
+let seenIds = new Set();
+
+setLang(currentLang);
+
+if (!TOPIC) {
+  document.getElementById('noTopic').style.display = 'block';
+  document.getElementById('chatArea').style.display = 'none';
+} else {
+  loadHistory(TOPIC);
+  subscribeLive(TOPIC);
+}
+
+function quickFill(idx) {
+  document.getElementById('chatInput').value = QUICK_REPLIES[idx][currentLang];
+}
+
+function addBubble(text, kind) {
+  const thread = document.getElementById('thread');
+  const div = document.createElement('div');
+  div.className = 'bubble ' + kind;
+  div.textContent = text;
+  thread.appendChild(div);
+  thread.scrollTop = thread.scrollHeight;
+}
+
+function handleIncoming(msg, id) {
+  if (seenIds.has(id)) return;
+  seenIds.add(id);
+  if (msg.startsWith('Owner: ')) {
+    addBubble(msg.slice(7), 'mine');
+  } else if (msg.startsWith('Visitor: ')) {
+    addBubble(msg.slice(9), 'theirs');
+  } else {
+    addBubble(msg, 'system');
+  }
+}
+
+async function loadHistory(topic) {
+  try {
+    const r = await fetch('https://ntfy.sh/' + topic + '/json?poll=1');
+    const text = await r.text();
+    text.trim().split('\n').filter(Boolean).forEach(line => {
+      try {
+        const data = JSON.parse(line);
+        if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+      } catch (e) {}
+    });
+  } catch (e) {}
+}
+
+function subscribeLive(topic) {
+  const sse = new EventSource('https://ntfy.sh/' + topic + '/sse');
+  sse.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.event === 'message' && data.message) handleIncoming(data.message, data.id);
+    } catch (err) {}
+  };
+}
+
+async function sendChatMsg() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !TOPIC) return;
+  const btn = document.getElementById('chatSendBtn');
+  btn.disabled = true;
+  try {
+    await fetch('https://ntfy.sh/' + TOPIC, { method: 'POST', body: 'Owner: ' + text });
+    input.value = '';
+  } catch (e) {
+    alert(UI[currentLang].sendError);
+  }
+  btn.disabled = false;
+  input.focus();
+}
+</script>
+</body></html>
